@@ -25,7 +25,9 @@
     "@medusajs/admin-sdk": "2.13.1",
     "@medusajs/cli": "2.13.1",
     "@medusajs/framework": "2.13.1",
-    "@medusajs/medusa": "2.13.1"
+    "@medusajs/medusa": "2.13.1",
+    "aws-jwt-verify": "^5.1.1",
+    "aws-sdk": "^2.1693.0"
   },
   "devDependencies": {
     "@medusajs/test-utils": "2.13.1",

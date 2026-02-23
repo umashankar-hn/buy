@@ -120,11 +120,16 @@ export const getJwtToken = (): Promise<string> => {
         return
       }
 
-      const payload = session?.getIdToken()
-      if (payload) {
-        resolve(payload.getJwtToken())
+      if (!session || !session.isValid()) {
+        reject(new Error('Session is invalid or expired'))
+        return
+      }
+
+      const idToken = session.getIdToken()
+      if (idToken) {
+        resolve(idToken.getJwtToken())
       } else {
-        reject(new Error('No session found'))
+        reject(new Error('No ID token found'))
       }
     })
   })

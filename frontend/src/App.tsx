@@ -6,6 +6,7 @@ import LoginPage from '@/pages/Login'
 import SignupPage from '@/pages/Signup'
 import VerifyPage from '@/pages/Verify'
 import Dashboard from '@/pages/Dashboard'
+import History from '@/pages/History'
 
 function AppRoutes() {
   const { isAuthenticated } = useAuthHook()
@@ -30,6 +31,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/history"
+        element={
+          <ProtectedRoute>
+            <History />
           </ProtectedRoute>
         }
       />

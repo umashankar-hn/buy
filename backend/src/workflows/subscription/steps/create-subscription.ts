@@ -1,7 +1,6 @@
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 import { SUBSCRIPTION_MODULE } from "../../../modules/subscription"
 import SubscriptionService from "../../../modules/subscription/service"
-import AuthorizeNetService from "../../../modules/subscription/services/authorize-net"
 
 export interface CreateSubscriptionInput {
   customer_id: string
@@ -11,14 +10,12 @@ export interface CreateSubscriptionInput {
   amount: number
   currency: string
   billing_cycle: "monthly" | "yearly" | "weekly"
-  paymentToken: string
 }
 
 export const createSubscriptionStep = createStep(
   "create-subscription-step",
   async (input: CreateSubscriptionInput, { container }) => {
     const subscriptionService: SubscriptionService = container.resolve(SUBSCRIPTION_MODULE)
-    const authorizeNet = new AuthorizeNetService()
 
     // Calculate billing dates
     const now = new Date()
@@ -36,50 +33,8 @@ export const createSubscriptionStep = createStep(
         break
     }
 
-    // Create customer profile in Authorize.net
-    let customerProfileId = ""
-    let paymentProfileId = ""
-
-    try {
-      const customerResult = await authorizeNet.createCustomerProfile({
-        email: input.email,
-        paymentToken: input.paymentToken,
-      })
-      customerProfileId = customerResult.customerProfileId
-      paymentProfileId = customerResult.customerPaymentProfileId
-    } catch (error) {
-      // If customer already exists, handle the error or use existing profile
-      console.error("Error creating customer profile:", error)
-      throw error
-    }
-
-    // Create subscription in Authorize.net
-    const intervalMap = {
-      monthly: { interval: "months" as const, intervalLength: 1 },
-      yearly: { interval: "months" as const, intervalLength: 12 },
-      weekly: { interval: "weeks" as const, intervalLength: 1 },
-    }
-
-    const intervalConfig = intervalMap[input.billing_cycle]
-
-    let authorizeSubscriptionId = ""
-    try {
-      const subscriptionResult = await authorizeNet.createSubscription({
-        customerProfileId,
-        customerPaymentProfileId: paymentProfileId,
-        planId: input.plan_id,
-        amount: input.amount,
-        interval: intervalConfig.interval,
-        intervalLength: intervalConfig.intervalLength,
-      })
-      authorizeSubscriptionId = subscriptionResult.subscriptionId
-    } catch (error) {
-      console.error("Error creating subscription:", error)
-      throw error
-    }
-
-    // Create subscription in database
-    const subscription = await subscriptionService.createSubscriptions({
+    // Create subscription in database (dummy payment - no Authorize.Net)
+    const [subscription] = await subscriptionService.createSubscriptions([{
       customer_id: input.customer_id,
       plan_id: input.plan_id,
       plan_name: input.plan_name,
@@ -90,12 +45,12 @@ export const createSubscriptionStep = createStep(
       current_period_start: now,
       current_period_end: periodEnd,
       next_billing_date: periodEnd,
-      authorize_subscription_id: authorizeSubscriptionId,
-      authorize_customer_profile_id: customerProfileId,
-      authorize_payment_profile_id: paymentProfileId,
-    })
+      authorize_subscription_id: null,
+      authorize_customer_profile_id: null,
+      authorize_payment_profile_id: null,
+    }])
 
-    return new StepResponse(subscription, subscription[0].id)
+    return new StepResponse(subscription, subscription.id)
   },
   async (subscriptionId, { container }) => {
     const subscriptionService: SubscriptionService = container.resolve(SUBSCRIPTION_MODULE)

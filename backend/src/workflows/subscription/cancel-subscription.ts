@@ -1,5 +1,5 @@
 import { createWorkflow, WorkflowResponse } from "@medusajs/framework/workflows-sdk"
-import { cancelSubscriptionStep } from "../steps/cancel-subscription"
+import { cancelSubscriptionStep } from "./steps/cancel-subscription"
 
 export const cancelSubscriptionWorkflow = createWorkflow(
   "cancel-subscription",
