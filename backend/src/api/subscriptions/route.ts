@@ -34,7 +34,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const { result } = await createSubscriptionWorkflow(req.scope).run({
     input: {
-      ...req.body,
+      ...(req.body || {}),
       customer_id: auth.customerId,
       email: auth.email,
     },

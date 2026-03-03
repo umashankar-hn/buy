@@ -15,9 +15,6 @@ module.exports = defineConfig({
   },
   modules: [
     {
-      resolve: "./src/modules/custom-product",
-    },
-    {
       resolve: "./src/modules/subscription",
     },
   ],

@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse, MiddlewareFunction } from "@medusajs/framework/http"
 import { CognitoJwtVerifier } from "aws-jwt-verify"
-import { Modules } from "@medusajs/framework/utils"
+import { Modules, MedusaError } from "@medusajs/framework/utils"
 
 const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID || ""
 const cognitoClientId = process.env.COGNITO_CLIENT_ID || ""
@@ -26,11 +26,10 @@ export const cognitoAuthMiddleware: MiddlewareFunction = async (
     const authHeader = req.headers.authorization
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res.status(401).json({
-        error: "Unauthorized",
-        message: "Missing authorization header",
-      })
-      return
+      throw new MedusaError(
+        MedusaError.Types.UNAUTHORIZED,
+        "Missing authorization header"
+      )
     }
 
     const token = authHeader.substring(7)
@@ -39,15 +38,12 @@ export const cognitoAuthMiddleware: MiddlewareFunction = async (
     try {
       payload = await verifier.verify(token)
     } catch (err) {
-      console.error("Token verification failed:", err)
-      res.status(401).json({
-        error: "Unauthorized",
-        message: "Invalid or expired token",
-      })
-      return
+      throw new MedusaError(
+        MedusaError.Types.UNAUTHORIZED,
+        "Invalid or expired token"
+      )
     }
 
-    // Get or create Medusa customer by email (keyed by cognito_sub in metadata)
     const customerService = req.scope.resolve(Modules.CUSTOMER)
 
     const customers = await customerService.listCustomers({
@@ -74,10 +70,12 @@ export const cognitoAuthMiddleware: MiddlewareFunction = async (
 
     next()
   } catch (error) {
-    console.error("Auth error:", error)
-    res.status(500).json({
-      error: "Internal Server Error",
-      message: "Authentication failed",
-    })
+    if (error instanceof MedusaError) {
+      throw error
+    }
+    throw new MedusaError(
+      MedusaError.Types.UNEXPECTED_STATE,
+      "Authentication failed"
+    )
   }
 }

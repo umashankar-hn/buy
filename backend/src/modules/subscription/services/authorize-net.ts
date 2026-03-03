@@ -1,223 +1,168 @@
-import axios from "axios"
+import ApiContracts from 'authorizenet/lib/apicontracts';
+import ApiControllers from 'authorizenet/lib/apicontrollers';
 
 export interface AuthorizeNetConfig {
-  apiLogin: string
-  transactionKey: string
-  environment: "sandbox" | "production"
-}
-
-export interface CreateCustomerProfileRequest {
-  email: string
-  paymentToken: string // Opaque Data token from Accept.js
+  apiLogin?: string;
+  transactionKey?: string;
+  environment?: 'production' | 'sandbox';
 }
 
 export interface CreateSubscriptionRequest {
-  customerProfileId: string
-  customerPaymentProfileId: string
-  planId: string
-  amount: number
-  interval: "months" | "weeks" | "days"
-  intervalLength: number
-  startDate?: string
-}
-
-export interface CancelSubscriptionRequest {
-  subscriptionId: string
+  customerProfileId?: string;
+  customerPaymentProfileId?: string;
+  paymentToken?: string;
+  email?: string;
+  customerId?: string;
+  planId: string;
+  amount: number;
+  interval: 'months' | 'weeks' | 'days';
+  intervalLength: number;
+  startDate?: string;
+  totalOccurrences?: number;
 }
 
 export class AuthorizeNetService {
-  private apiLogin: string
-  private transactionKey: string
-  private baseUrl: string
+  private apiLogin: string;
+  private transactionKey: string;
+  private environment: string;
+  private environmentUrl: string;
 
-  constructor() {
-    this.apiLogin = process.env.AUTHORIZE_NET_API_LOGIN || ""
-    this.transactionKey = process.env.AUTHORIZE_NET_TRANSACTION_KEY || ""
-    this.baseUrl = process.env.AUTHORIZE_NET_ENVIRONMENT === "production"
-      ? "https://api.authorize.net"
-      : "https://apitest.authorize.net"
-  }
+  constructor(config?: AuthorizeNetConfig) {
+    this.apiLogin = config?.apiLogin || process.env.AUTHORIZE_NET_API_LOGIN || '';
+    this.transactionKey = config?.transactionKey || process.env.AUTHORIZE_NET_TRANSACTION_KEY || '';
+    
+    const env = config?.environment || process.env.AUTHORIZE_NET_ENVIRONMENT || 'sandbox';
+    this.environment = env === 'production' ? 'production' : 'sandbox';
+    this.environmentUrl = this.environment === 'production'
+      ? 'https://api.authorize.net/xml/v1/request.api'
+      : 'https://apitest.authorize.net/xml/v1/request.api';
 
-  private getAuthHeader(): string {
-    return Buffer.from(`${this.apiLogin}:${this.transactionKey}`).toString("base64")
-  }
-
-  async createCustomerProfile(request: CreateCustomerProfileRequest) {
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/xml/v1/request.api`,
-        {
-          createCustomerProfileRequest: {
-            merchantAuthentication: {
-              name: this.apiLogin,
-              transactionKey: this.transactionKey,
-            },
-            profile: {
-              merchantCustomerId: request.email,
-              email: request.email,
-              paymentProfiles: {
-                customerType: "individual",
-                payment: {
-                  opaqueData: {
-                    dataDescriptor: "COMMON.ACCEPT.INAPP.PAYMENT",
-                    dataValue: request.paymentToken,
-                  },
-                },
-              },
-            },
-          },
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      )
-
-      const result = response.data.createCustomerProfileResponse
-
-      if (result.messages.resultCode === "Ok") {
-        return {
-          success: true,
-          customerProfileId: result.customerProfileId,
-          customerPaymentProfileId: result.customerPaymentProfileIdList.numericString[0],
-        }
-      } else {
-        throw new Error(result.messages.message[0].text)
-      }
-    } catch (error: any) {
-      throw new Error(`Failed to create customer profile: ${error.message}`)
+    if (!this.apiLogin || !this.transactionKey) {
+      throw new Error('Authorize.Net credentials not configured');
     }
   }
 
-  async createSubscription(request: CreateSubscriptionRequest) {
-    try {
-      const startDate = request.startDate || new Date().toISOString().split("T")[0]
-
-      const response = await axios.post(
-        `${this.baseUrl}/xml/v1/request.api`,
-        {
-          createSubscriptionRequest: {
-            merchantAuthentication: {
-              name: this.apiLogin,
-              transactionKey: this.transactionKey,
-            },
-            subscription: {
-              name: request.planId,
-              paymentSchedule: {
-                interval: {
-                  length: request.intervalLength,
-                  unit: request.interval,
-                },
-                startDate: startDate,
-                totalOccurrences: 9999,
-              },
-              amount: request.amount,
-              profile: {
-                customerProfileId: request.customerProfileId,
-                customerPaymentProfileId: request.customerPaymentProfileId,
-              },
-            },
-          },
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      )
-
-      const result = response.data.createSubscriptionResponse
-
-      if (result.messages.resultCode === "Ok") {
-        return {
-          success: true,
-          subscriptionId: result.subscriptionId,
-          status: result.subscriptionStatus,
-        }
-      } else {
-        throw new Error(result.messages.message[0].text)
-      }
-    } catch (error: any) {
-      throw new Error(`Failed to create subscription: ${error.message}`)
-    }
+  getEnvironment(): string {
+    return this.environment;
   }
 
-  async cancelSubscription(subscriptionId: string) {
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/xml/v1/request.api`,
-        {
-          cancelSubscriptionRequest: {
-            merchantAuthentication: {
-              name: this.apiLogin,
-              transactionKey: this.transactionKey,
-            },
-            subscriptionId,
-          },
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      )
-
-      const result = response.data.cancelSubscriptionResponse
-
-      if (result.messages.resultCode === "Ok") {
-        return { success: true }
-      } else {
-        throw new Error(result.messages.message[0].text)
-      }
-    } catch (error: any) {
-      throw new Error(`Failed to cancel subscription: ${error.message}`)
-    }
+  isSandbox(): boolean {
+    return this.environment === 'sandbox';
   }
 
-  async getSubscription(subscriptionId: string) {
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/xml/v1/request.api`,
-        {
-          getSubscriptionRequest: {
-            merchantAuthentication: {
-              name: this.apiLogin,
-              transactionKey: this.transactionKey,
-            },
-            subscriptionId,
-          },
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      )
+  private getMerchantAuth(): ApiContracts.MerchantAuthenticationType {
+    const merchantAuth = new ApiContracts.MerchantAuthenticationType();
+    merchantAuth.setName(this.apiLogin);
+    merchantAuth.setTransactionKey(this.transactionKey);
+    return merchantAuth;
+  }
 
-      const result = response.data.getSubscriptionResponse
+  async createSubscription(request: CreateSubscriptionRequest): Promise<{
+    success: boolean;
+    subscriptionId: string;
+    customerProfileId?: string;
+    customerPaymentProfileId?: string;
+  }> {
+    return new Promise((resolve, reject) => {
+      const merchantAuth = this.getMerchantAuth();
 
-      if (result.messages.resultCode === "Ok") {
-        return {
-          success: true,
-          subscription: {
-            id: result.subscription.id,
-            status: result.subscription.status,
-            amount: result.subscription.amount,
-            nextBillingDate: result.subscription.nextBillingDate,
-            profile: {
-              customerProfileId: result.subscription.profile.customerProfileId,
-              customerPaymentProfileId: result.subscription.profile.customerPaymentProfileId,
-            },
-          },
+      const interval = new ApiContracts.PaymentScheduleType.Interval();
+      interval.setLength(request.intervalLength);
+      interval.setUnit(ApiContracts.ARBSubscriptionUnitEnum[request.interval.toUpperCase()]);
+
+      const paymentSchedule = new ApiContracts.PaymentScheduleType();
+      paymentSchedule.setInterval(interval);
+      paymentSchedule.setStartDate(request.startDate || new Date().toISOString().split('T')[0]);
+      paymentSchedule.setTotalOccurrences(request.totalOccurrences || 9999);
+
+      const subscription = new ApiContracts.ARBSubscriptionType();
+      subscription.setName(request.planId);
+      subscription.setPaymentSchedule(paymentSchedule);
+      subscription.setAmount(request.amount);
+
+      if (request.paymentToken) {
+        const opaqueData = new ApiContracts.OpaqueDataType();
+        opaqueData.setDataDescriptor('COMMON.ACCEPT.INAPP.PAYMENT');
+        opaqueData.setDataValue(request.paymentToken);
+
+        const payment = new ApiContracts.PaymentType();
+        payment.setOpaqueData(opaqueData);
+
+        subscription.setPayment(payment);
+
+        const billTo = new ApiContracts.NameAndAddressType();
+        billTo.setFirstName('Customer');
+        billTo.setLastName('User');
+        subscription.setBillTo(billTo);
+
+        if (request.email) {
+          const customer = new ApiContracts.CustomerType();
+          customer.setEmail(request.email);
+          if (request.customerId) {
+            customer.setId((request.customerId || request.email).substring(0, 20));
+          }
+          subscription.setCustomer(customer);
         }
+      } else if (request.customerProfileId && request.customerPaymentProfileId) {
+        const customerProfileId = new ApiContracts.CustomerProfileIdType();
+        customerProfileId.setCustomerProfileId(request.customerProfileId);
+        customerProfileId.setCustomerPaymentProfileId(request.customerPaymentProfileId);
+        subscription.setProfile(customerProfileId);
       } else {
-        throw new Error(result.messages.message[0].text)
+        reject(new Error('Either paymentToken or customerProfileId/customerPaymentProfileId required'));
+        return;
       }
-    } catch (error: any) {
-      throw new Error(`Failed to get subscription: ${error.message}`)
-    }
+
+      const createRequest = new ApiContracts.ARBCreateSubscriptionRequest();
+      createRequest.setMerchantAuthentication(merchantAuth);
+      createRequest.setSubscription(subscription);
+
+      const ctrl = new ApiControllers.ARBCreateSubscriptionController(createRequest.getJSON());
+      ctrl.setEnvironment(this.environmentUrl);
+
+      ctrl.execute(() => {
+        const apiResponse = ctrl.getResponse();
+        const response = new ApiContracts.ARBCreateSubscriptionResponse(apiResponse);
+
+        if (response.getMessages().getResultCode() === ApiContracts.MessageTypeEnum.OK) {
+          resolve({
+            success: true,
+            subscriptionId: response.getSubscriptionId(),
+            customerProfileId: response.getProfile()?.getCustomerProfileId(),
+            customerPaymentProfileId: response.getProfile()?.getCustomerPaymentProfileId(),
+          });
+        } else {
+          const errorCode = response.getMessages().getMessage()[0].getCode();
+          const errorMessage = response.getMessages().getMessage()[0].getText();
+          reject(new Error(`Authorize.Net Error [${errorCode}]: ${errorMessage}`));
+        }
+      });
+    });
+  }
+
+  async cancelSubscription(subscriptionId: string): Promise<{ success: boolean }> {
+    return new Promise((resolve, reject) => {
+      const merchantAuth = this.getMerchantAuth();
+
+      const cancelRequest = new ApiContracts.ARBCancelSubscriptionRequest();
+      cancelRequest.setMerchantAuthentication(merchantAuth);
+      cancelRequest.setSubscriptionId(subscriptionId);
+
+      const ctrl = new ApiControllers.ARBCancelSubscriptionController(cancelRequest.getJSON());
+      ctrl.setEnvironment(this.environmentUrl);
+
+      ctrl.execute(() => {
+        const apiResponse = ctrl.getResponse();
+        const response = new ApiContracts.ARBCancelSubscriptionResponse(apiResponse);
+
+        if (response.getMessages().getResultCode() === ApiContracts.MessageTypeEnum.OK) {
+          resolve({ success: true });
+        } else {
+          reject(new Error(response.getMessages().getMessage()[0].getText()));
+        }
+      });
+    });
   }
 }
 
-export default AuthorizeNetService
+export default AuthorizeNetService;

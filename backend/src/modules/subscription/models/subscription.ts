@@ -6,6 +6,7 @@ const Subscription = model.define("subscription", {
   plan_id: model.text(),
   plan_name: model.text(),
   status: model.enum(["active", "canceled", "past_due", "paused"]),
+  //storing amount in cents
   amount: model.number(),
   currency: model.text(),
   billing_cycle: model.text(),
